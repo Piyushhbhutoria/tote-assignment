@@ -1,0 +1,17 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Basics
+
+- Always think when creating execution plan
+- Create a dbml file before starting and continue to update it as the satabase if updated
+- Use Golang v1.24 for backend services
+- Use test driven development approach
+- Use NVM for node package manager
+- Use React with typescript for frontend applications
+- Use the node v20 LTS for React application
+- Use gin framework for golang api servers
+

@@ -1,0 +1,136 @@
+Project pos_system {
+  database_type: 'PostgreSQL'
+  Note: 'Point of Sale System Database Schema'
+}
+
+Table plugins {
+  id serial [pk]
+  name varchar(100) [not null, unique]
+  description text
+  is_active boolean [default: false]
+  config jsonb [default: '{}']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Stores plugin configurations and status'
+}
+
+Table employees {
+  id serial [pk]
+  employee_id varchar(100) [not null, unique]
+  current_terminal_id varchar(100)
+  last_login timestamp
+  last_logout timestamp
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Tracks employee status and current terminal'
+}
+
+Table employee_sessions {
+  id serial [pk]
+  employee_id varchar(100) [not null]
+  terminal_id varchar(100) [not null]
+  login_time timestamp [not null]
+  logout_time timestamp
+  duration_minutes integer
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    employee_id
+  }
+
+  Note: 'Records employee login/logout sessions'
+}
+
+Table customers {
+  id serial [pk]
+  customer_id varchar(100) [not null, unique]
+  data jsonb
+  last_seen timestamp
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Stores customer information and tracking data'
+}
+
+Table items {
+  id serial [pk]
+  item_id varchar(100) [not null, unique]
+  name varchar(255) [not null]
+  price decimal(10,2) [not null]
+  requires_age_verification boolean [default: false]
+  minimum_age integer
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Product catalog with age verification requirements'
+}
+
+Table baskets {
+  id serial [pk]
+  basket_id varchar(100) [not null, unique]
+  terminal_id varchar(100) [not null]
+  employee_id varchar(100) [not null]
+  customer_id varchar(100)
+  status varchar(50) [not null]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Shopping session information'
+}
+
+Table basket_items {
+  id serial [pk]
+  basket_id varchar(100) [not null]
+  item_id varchar(100) [not null]
+  quantity integer [not null]
+  price_at_time decimal(10,2) [not null]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    basket_id
+  }
+
+  Note: 'Items in shopping baskets'
+}
+
+Table fraud_alerts {
+  id serial [pk]
+  basket_id varchar(100) [not null]
+  alert_type varchar(100) [not null]
+  description text
+  severity varchar(50) [not null]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    basket_id
+  }
+
+  Note: 'Records of suspicious activities'
+}
+
+Table item_recommendations {
+  id serial [pk]
+  source_item_id varchar(100) [not null]
+  recommended_item_id varchar(100) [not null]
+  confidence_score decimal(5,4) [not null]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    source_item_id
+    (source_item_id, recommended_item_id) [unique]
+  }
+
+  Note: 'Product recommendations based on purchase patterns'
+}
+
+// Relationships
+Ref: basket_items.basket_id > baskets.basket_id
+Ref: basket_items.item_id > items.item_id
+Ref: baskets.employee_id > employees.employee_id
+Ref: baskets.customer_id > customers.customer_id
+Ref: employee_sessions.employee_id > employees.employee_id
+Ref: fraud_alerts.basket_id > baskets.basket_id
+Ref: item_recommendations.source_item_id > items.item_id
+Ref: item_recommendations.recommended_item_id > items.item_id 
