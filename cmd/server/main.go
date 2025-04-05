@@ -182,7 +182,6 @@ func (s *server) handleEvent(ctx context.Context, event *models.Event) error {
 		}
 
 		// Process event through plugin
-		fmt.Println("Processing event through plugin", plugin.Name())
 		newEvents, err := plugin.ProcessEvent(ctx, event)
 
 		// Update plugin stats
@@ -227,10 +226,11 @@ func (s *server) handleListPlugins(c *gin.Context) {
 			LastProcessed   string `json:"lastProcessed,omitempty"`
 			ErrorCount      int    `json:"errorCount"`
 		} `json:"stats"`
-	}, 0, len(plugins))
+	}, len(plugins))
 
-	for _, p := range plugins {
-		resp := struct {
+	// Fill the response array in order
+	for i, p := range plugins {
+		response[i] = struct {
 			Name        string                 `json:"name"`
 			Description string                 `json:"description"`
 			IsActive    bool                   `json:"isActive"`
@@ -250,15 +250,13 @@ func (s *server) handleListPlugins(c *gin.Context) {
 		// Get plugin stats
 		s.statsMutex.RLock()
 		if stats, ok := s.pluginStats[p.Name()]; ok {
-			resp.Stats.EventsProcessed = stats.EventsProcessed
+			response[i].Stats.EventsProcessed = stats.EventsProcessed
 			if stats.LastProcessed != nil {
-				resp.Stats.LastProcessed = stats.LastProcessed.Format(time.RFC3339)
+				response[i].Stats.LastProcessed = stats.LastProcessed.Format(time.RFC3339)
 			}
-			resp.Stats.ErrorCount = stats.ErrorCount
+			response[i].Stats.ErrorCount = stats.ErrorCount
 		}
 		s.statsMutex.RUnlock()
-
-		response = append(response, resp)
 	}
 
 	c.JSON(http.StatusOK, response)

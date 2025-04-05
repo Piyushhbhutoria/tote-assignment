@@ -57,7 +57,6 @@ func (p *Plugin) ProcessEvent(ctx context.Context, event *models.Event) ([]*mode
 	if !p.active {
 		return nil, nil
 	}
-	fmt.Println("Processing event through plugin", p.Name())
 
 	if event.Type != models.EventCustomerIdentify {
 		return nil, nil

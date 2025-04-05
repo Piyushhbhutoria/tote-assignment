@@ -14,14 +14,17 @@ import (
 type Manager struct {
 	db      *database.Connection
 	plugins map[string]Plugin
-	mu      sync.RWMutex
+	// Keep track of plugin order
+	pluginOrder []string
+	mu          sync.RWMutex
 }
 
 // NewManager creates a new plugin manager
 func NewManager(db *database.Connection) *Manager {
 	return &Manager{
-		db:      db,
-		plugins: make(map[string]Plugin),
+		db:          db,
+		plugins:     make(map[string]Plugin),
+		pluginOrder: make([]string, 0),
 	}
 }
 
@@ -35,6 +38,7 @@ func (m *Manager) RegisterPlugin(p Plugin) error {
 	}
 
 	m.plugins[p.Name()] = p
+	m.pluginOrder = append(m.pluginOrder, p.Name())
 	log.Printf("Registered plugin: %s", p.Name())
 	return nil
 }
@@ -48,14 +52,14 @@ func (m *Manager) GetPlugin(name string) (Plugin, bool) {
 	return p, ok
 }
 
-// ListPlugins returns all registered plugins
+// ListPlugins returns all registered plugins in registration order
 func (m *Manager) ListPlugins() []Plugin {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	plugins := make([]Plugin, 0, len(m.plugins))
-	for _, p := range m.plugins {
-		plugins = append(plugins, p)
+	plugins := make([]Plugin, len(m.pluginOrder))
+	for i, name := range m.pluginOrder {
+		plugins[i] = m.plugins[name]
 	}
 	return plugins
 }
