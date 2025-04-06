@@ -54,10 +54,10 @@ jobs:
       - name: Run tests
         run: go test -v ./...
         env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: tote_test
+          DB_HOST: localhost
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: tote_test
           KAFKA_BROKERS: localhost:9092
           KAFKA_TOPIC: pos_events
+          KAFKA_CONSUMER_GROUP: pos_consumer_group

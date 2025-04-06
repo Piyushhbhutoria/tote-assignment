@@ -1,6 +1,10 @@
 package kafka
 
-import "time"
+import (
+	"os"
+	"strings"
+	"time"
+)
 
 // Config holds Kafka configuration
 type Config struct {
@@ -15,11 +19,18 @@ type Config struct {
 // NewDefaultConfig returns a default configuration
 func NewDefaultConfig() *Config {
 	return &Config{
-		Brokers:        []string{"localhost:9092"},
-		Topic:          "pos_events",
-		ConsumerGroup:  "pos_consumer_group",
+		Brokers:        strings.Split(getEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), ","),
+		Topic:          getEnvOrDefault("KAFKA_TOPIC", "pos_events"),
+		ConsumerGroup:  getEnvOrDefault("KAFKA_CONSUMER_GROUP", "pos_consumer_group"),
 		RetryAttempts:  3,
 		RetryDelay:     time.Second * 5,
 		CommitInterval: time.Second * 1,
 	}
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
