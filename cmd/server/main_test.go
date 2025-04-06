@@ -178,9 +178,10 @@ func TestHandleUpdatePluginConfig(t *testing.T) {
 		"key": "value",
 	}
 	body := bytes.NewBuffer(nil)
-	json.NewEncoder(body).Encode(map[string]interface{}{
+	err = json.NewEncoder(body).Encode(map[string]interface{}{
 		"config": config,
 	})
+	assert.NoError(t, err)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PATCH", "/api/plugins/test_plugin/config", body)
