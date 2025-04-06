@@ -51,16 +51,11 @@ func (m *MockPlugin) ProcessEvent(ctx context.Context, event *models.Event) ([]*
 	return args.Get(0).([]*models.Event), args.Error(1)
 }
 
-// setupTestServer creates a new test server with mock dependencies
 func setupTestServer(t *testing.T) (*server, *gin.Engine) {
-	gin.SetMode(gin.TestMode)
-
-	// Create test database connection
+	// Initialize database
 	dbCfg := database.NewDefaultConfig()
 	db, err := database.New(context.Background(), dbCfg)
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
+	assert.NoError(t, err)
 
 	// Initialize plugin manager
 	pluginMgr := plugins.NewManager(db)
@@ -72,8 +67,11 @@ func setupTestServer(t *testing.T) (*server, *gin.Engine) {
 		pluginStats: make(map[string]*models.PluginStats),
 	}
 
-	// Setup router
+	// Initialize Gin router
+	gin.SetMode(gin.TestMode)
 	r := gin.Default()
+
+	// API routes
 	api := r.Group("/api")
 	{
 		api.GET("/plugins", srv.handleListPlugins)
@@ -89,11 +87,11 @@ func TestHandleListPlugins(t *testing.T) {
 
 	// Create mock plugin
 	mockPlugin := new(MockPlugin)
-	mockPlugin.On("Name").Return("test_plugin")
-	mockPlugin.On("Description").Return("Test plugin description")
-	mockPlugin.On("IsActive").Return(true)
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(true).Maybe()
 
-	// Register mock plugin
+	// Register plugin
 	err := srv.pluginMgr.RegisterPlugin(mockPlugin)
 	assert.NoError(t, err)
 
@@ -104,7 +102,7 @@ func TestHandleListPlugins(t *testing.T) {
 		ErrorCount:      2,
 	}
 
-	// Create test request
+	// Create request
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/plugins", nil)
 	r.ServeHTTP(w, req)
@@ -112,19 +110,27 @@ func TestHandleListPlugins(t *testing.T) {
 	// Assert response
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var response []map[string]interface{}
+	var response []struct {
+		Name        string                 `json:"name"`
+		Description string                 `json:"description"`
+		IsActive    bool                   `json:"isActive"`
+		Config      map[string]interface{} `json:"config"`
+		Stats       struct {
+			EventsProcessed int    `json:"eventsProcessed"`
+			LastProcessed   string `json:"lastProcessed,omitempty"`
+			ErrorCount      int    `json:"errorCount"`
+		} `json:"stats"`
+	}
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Len(t, response, 1)
+	assert.Equal(t, "test_plugin", response[0].Name)
+	assert.Equal(t, "Test plugin description", response[0].Description)
+	assert.True(t, response[0].IsActive)
+	assert.Equal(t, 10, response[0].Stats.EventsProcessed)
+	assert.Equal(t, 2, response[0].Stats.ErrorCount)
 
-	plugin := response[0]
-	assert.Equal(t, "test_plugin", plugin["name"])
-	assert.Equal(t, "Test plugin description", plugin["description"])
-	assert.Equal(t, true, plugin["isActive"])
-
-	stats := plugin["stats"].(map[string]interface{})
-	assert.Equal(t, float64(10), stats["eventsProcessed"])
-	assert.Equal(t, float64(2), stats["errorCount"])
+	mockPlugin.AssertExpectations(t)
 }
 
 func TestHandleUpdatePluginStatus(t *testing.T) {
@@ -132,24 +138,24 @@ func TestHandleUpdatePluginStatus(t *testing.T) {
 
 	// Create mock plugin
 	mockPlugin := new(MockPlugin)
-	mockPlugin.On("Name").Return("test_plugin")
-	mockPlugin.On("SetActive", true).Once()
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(true).Maybe()
+	mockPlugin.On("SetActive", false).Once()
 
-	// Register mock plugin
+	// Register plugin
 	err := srv.pluginMgr.RegisterPlugin(mockPlugin)
 	assert.NoError(t, err)
 
-	// Create test request
-	body := map[string]interface{}{
-		"isActive": true,
-	}
-	jsonBody, _ := json.Marshal(body)
+	// Create request
+	body := bytes.NewBufferString(`{"isActive": false}`)
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PATCH", "/api/plugins/test_plugin/status", bytes.NewBuffer(jsonBody))
+	req, _ := http.NewRequest("PATCH", "/api/plugins/test_plugin/status", body)
 	r.ServeHTTP(w, req)
 
 	// Assert response
 	assert.Equal(t, http.StatusOK, w.Code)
+
 	mockPlugin.AssertExpectations(t)
 }
 
@@ -158,27 +164,31 @@ func TestHandleUpdatePluginConfig(t *testing.T) {
 
 	// Create mock plugin
 	mockPlugin := new(MockPlugin)
-	mockPlugin.On("Name").Return("test_plugin")
-	mockPlugin.On("Configure", mock.Anything).Return(nil)
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(true).Maybe()
+	mockPlugin.On("Configure", mock.Anything).Return(nil).Once()
 
-	// Register mock plugin
+	// Register plugin
 	err := srv.pluginMgr.RegisterPlugin(mockPlugin)
 	assert.NoError(t, err)
 
-	// Create test request
+	// Create request
 	config := map[string]interface{}{
 		"key": "value",
 	}
-	body := map[string]interface{}{
+	body := bytes.NewBuffer(nil)
+	json.NewEncoder(body).Encode(map[string]interface{}{
 		"config": config,
-	}
-	jsonBody, _ := json.Marshal(body)
+	})
+
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PATCH", "/api/plugins/test_plugin/config", bytes.NewBuffer(jsonBody))
+	req, _ := http.NewRequest("PATCH", "/api/plugins/test_plugin/config", body)
 	r.ServeHTTP(w, req)
 
 	// Assert response
 	assert.Equal(t, http.StatusOK, w.Code)
+
 	mockPlugin.AssertExpectations(t)
 }
 
@@ -187,23 +197,26 @@ func TestHandleEvent(t *testing.T) {
 
 	// Create mock plugin
 	mockPlugin := new(MockPlugin)
-	mockPlugin.On("Name").Return("test_plugin")
-	mockPlugin.On("ProcessEvent", mock.Anything, mock.Anything).Return([]*models.Event{}, nil)
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(true).Maybe()
 
-	// Register mock plugin
+	// Setup ProcessEvent expectations
+	ctx := context.Background()
+	event := &models.Event{
+		ID:        "test_event",
+		Type:      "test_type",
+		Payload:   map[string]interface{}{"key": "value"},
+		Timestamp: time.Now(),
+	}
+	mockPlugin.On("ProcessEvent", ctx, event).Return([]*models.Event{}, nil).Once()
+
+	// Register plugin
 	err := srv.pluginMgr.RegisterPlugin(mockPlugin)
 	assert.NoError(t, err)
 
-	// Create test event
-	event := &models.Event{
-		ID:        "test_event",
-		Type:      models.EventType("test_plugin"),
-		Timestamp: time.Now(),
-		Payload:   map[string]interface{}{"key": "value"},
-	}
-
-	// Process event
-	err = srv.handleEvent(context.Background(), event)
+	// Test handling event
+	err = srv.handleEvent(ctx, event)
 	assert.NoError(t, err)
 
 	// Verify stats were updated
@@ -211,7 +224,75 @@ func TestHandleEvent(t *testing.T) {
 	assert.NotNil(t, stats)
 	assert.Equal(t, 1, stats.EventsProcessed)
 	assert.Equal(t, 0, stats.ErrorCount)
-	assert.NotNil(t, stats.LastProcessed)
+	assert.Equal(t, &event.Timestamp, stats.LastProcessed)
+
+	mockPlugin.AssertExpectations(t)
+}
+
+func TestHandleEventWithError(t *testing.T) {
+	srv, _ := setupTestServer(t)
+
+	// Create mock plugin
+	mockPlugin := new(MockPlugin)
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(true).Maybe()
+
+	// Setup ProcessEvent expectations with error
+	ctx := context.Background()
+	event := &models.Event{
+		ID:        "test_event",
+		Type:      "test_type",
+		Payload:   map[string]interface{}{"key": "value"},
+		Timestamp: time.Now(),
+	}
+	mockPlugin.On("ProcessEvent", ctx, event).Return([]*models.Event{}, assert.AnError).Once()
+
+	// Register plugin
+	err := srv.pluginMgr.RegisterPlugin(mockPlugin)
+	assert.NoError(t, err)
+
+	// Test handling event
+	err = srv.handleEvent(ctx, event)
+	assert.NoError(t, err) // Main handler doesn't return error, just logs it
+
+	// Verify stats were updated
+	stats := srv.pluginStats["test_plugin"]
+	assert.NotNil(t, stats)
+	assert.Equal(t, 1, stats.EventsProcessed)
+	assert.Equal(t, 1, stats.ErrorCount)
+	assert.Equal(t, &event.Timestamp, stats.LastProcessed)
+
+	mockPlugin.AssertExpectations(t)
+}
+
+func TestHandleEventWithInactivePlugin(t *testing.T) {
+	srv, _ := setupTestServer(t)
+
+	// Create mock plugin
+	mockPlugin := new(MockPlugin)
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(false).Maybe() // Plugin is inactive
+
+	// Register plugin
+	err := srv.pluginMgr.RegisterPlugin(mockPlugin)
+	assert.NoError(t, err)
+
+	// Test handling event
+	ctx := context.Background()
+	event := &models.Event{
+		ID:        "test_event",
+		Type:      "test_type",
+		Payload:   map[string]interface{}{"key": "value"},
+		Timestamp: time.Now(),
+	}
+	err = srv.handleEvent(ctx, event)
+	assert.NoError(t, err)
+
+	// Verify no stats were updated
+	stats := srv.pluginStats["test_plugin"]
+	assert.Nil(t, stats)
 
 	mockPlugin.AssertExpectations(t)
 }

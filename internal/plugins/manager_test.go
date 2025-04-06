@@ -3,7 +3,6 @@ package plugins
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/Piyushhbhutoria/tote-assignment/internal/models"
 	"github.com/Piyushhbhutoria/tote-assignment/pkg/database"
@@ -45,143 +44,193 @@ func (m *MockPlugin) ProcessEvent(ctx context.Context, event *models.Event) ([]*
 	return args.Get(0).([]*models.Event), args.Error(1)
 }
 
-func TestManagerRegisterPlugin(t *testing.T) {
-	// Create test database connection
+func setupTestManager(t *testing.T) *Manager {
 	dbCfg := database.NewDefaultConfig()
 	db, err := database.New(context.Background(), dbCfg)
 	assert.NoError(t, err)
-	defer db.Close()
+	return NewManager(db)
+}
 
-	// Create plugin manager
-	manager := NewManager(db)
+func TestNewManager(t *testing.T) {
+	mgr := setupTestManager(t)
+	assert.NotNil(t, mgr)
+	assert.NotNil(t, mgr.db)
+	assert.NotNil(t, mgr.plugins)
+	assert.NotNil(t, mgr.pluginOrder)
+	assert.Empty(t, mgr.plugins)
+	assert.Empty(t, mgr.pluginOrder)
+}
+
+func TestManagerRegisterPlugin(t *testing.T) {
+	mgr := setupTestManager(t)
 
 	// Create mock plugin
 	mockPlugin := new(MockPlugin)
-	mockPlugin.On("Name").Return("test_plugin")
-	mockPlugin.On("Description").Return("Test plugin description")
-	mockPlugin.On("IsActive").Return(false)
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(true).Maybe()
 
-	// Register plugin
-	err = manager.RegisterPlugin(mockPlugin)
+	// Test successful registration
+	err := mgr.RegisterPlugin(mockPlugin)
 	assert.NoError(t, err)
+	assert.Len(t, mgr.plugins, 1)
+	assert.Len(t, mgr.pluginOrder, 1)
 
-	// Verify plugin was registered
-	plugin, ok := manager.GetPlugin("test_plugin")
-	assert.True(t, ok)
-	assert.Equal(t, mockPlugin, plugin)
-
-	// Try to register same plugin again
-	err = manager.RegisterPlugin(mockPlugin)
+	// Test duplicate registration
+	err = mgr.RegisterPlugin(mockPlugin)
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already registered")
 
 	mockPlugin.AssertExpectations(t)
 }
 
-func TestManagerListPlugins(t *testing.T) {
-	// Create test database connection
-	dbCfg := database.NewDefaultConfig()
-	db, err := database.New(context.Background(), dbCfg)
-	assert.NoError(t, err)
-	defer db.Close()
-
-	// Create plugin manager
-	manager := NewManager(db)
-
-	// Create mock plugins
-	plugin1 := new(MockPlugin)
-	plugin1.On("Name").Return("plugin1")
-	plugin1.On("Description").Return("Plugin 1 description")
-	plugin1.On("IsActive").Return(true)
-
-	plugin2 := new(MockPlugin)
-	plugin2.On("Name").Return("plugin2")
-	plugin2.On("Description").Return("Plugin 2 description")
-	plugin2.On("IsActive").Return(false)
-
-	// Register plugins
-	err = manager.RegisterPlugin(plugin1)
-	assert.NoError(t, err)
-	err = manager.RegisterPlugin(plugin2)
-	assert.NoError(t, err)
-
-	// List plugins
-	plugins := manager.ListPlugins()
-	assert.Len(t, plugins, 2)
-
-	// Verify plugin order and properties
-	assert.Contains(t, []string{plugins[0].Name(), plugins[1].Name()}, "plugin1")
-	assert.Contains(t, []string{plugins[0].Name(), plugins[1].Name()}, "plugin2")
-
-	plugin1.AssertExpectations(t)
-	plugin2.AssertExpectations(t)
-}
-
 func TestManagerGetPlugin(t *testing.T) {
-	// Create test database connection
-	dbCfg := database.NewDefaultConfig()
-	db, err := database.New(context.Background(), dbCfg)
-	assert.NoError(t, err)
-	defer db.Close()
-
-	// Create plugin manager
-	manager := NewManager(db)
+	mgr := setupTestManager(t)
 
 	// Create mock plugin
 	mockPlugin := new(MockPlugin)
-	mockPlugin.On("Name").Return("test_plugin")
-	mockPlugin.On("Description").Return("Test plugin description")
-	mockPlugin.On("IsActive").Return(true)
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(true).Maybe()
 
 	// Register plugin
-	err = manager.RegisterPlugin(mockPlugin)
+	err := mgr.RegisterPlugin(mockPlugin)
 	assert.NoError(t, err)
 
-	// Get existing plugin
-	plugin, ok := manager.GetPlugin("test_plugin")
-	assert.True(t, ok)
-	assert.Equal(t, mockPlugin, plugin)
+	// Test getting existing plugin
+	plugin, exists := mgr.GetPlugin("test_plugin")
+	assert.True(t, exists)
+	assert.NotNil(t, plugin)
 
-	// Get non-existent plugin
-	plugin, ok = manager.GetPlugin("non_existent")
-	assert.False(t, ok)
+	// Test getting non-existent plugin
+	plugin, exists = mgr.GetPlugin("non_existent")
+	assert.False(t, exists)
 	assert.Nil(t, plugin)
 
 	mockPlugin.AssertExpectations(t)
 }
 
-func TestManagerProcessEvent(t *testing.T) {
-	// Create test database connection
-	dbCfg := database.NewDefaultConfig()
-	db, err := database.New(context.Background(), dbCfg)
-	assert.NoError(t, err)
-	defer db.Close()
+func TestManagerListPlugins(t *testing.T) {
+	mgr := setupTestManager(t)
 
-	// Create plugin manager
-	manager := NewManager(db)
+	// Create first mock plugin
+	plugin1 := new(MockPlugin)
+	plugin1.On("Name").Return("plugin1").Maybe()
+	plugin1.On("Description").Return("Plugin 1 description").Maybe()
+	plugin1.On("IsActive").Return(true).Maybe()
+
+	// Create second mock plugin
+	plugin2 := new(MockPlugin)
+	plugin2.On("Name").Return("plugin2").Maybe()
+	plugin2.On("Description").Return("Plugin 2 description").Maybe()
+	plugin2.On("IsActive").Return(false).Maybe()
+
+	// Register plugins
+	err := mgr.RegisterPlugin(plugin1)
+	assert.NoError(t, err)
+	err = mgr.RegisterPlugin(plugin2)
+	assert.NoError(t, err)
+
+	// Test listing plugins
+	plugins := mgr.ListPlugins()
+	assert.Len(t, plugins, 2)
+	assert.Equal(t, "plugin1", plugins[0].Name())
+	assert.Equal(t, "plugin2", plugins[1].Name())
+
+	plugin1.AssertExpectations(t)
+	plugin2.AssertExpectations(t)
+}
+
+func TestManagerHandleEvent(t *testing.T) {
+	mgr := setupTestManager(t)
 
 	// Create mock plugin
 	mockPlugin := new(MockPlugin)
-	mockPlugin.On("Name").Return("test_plugin")
-	mockPlugin.On("Description").Return("Test plugin description")
-	mockPlugin.On("IsActive").Return(true)
-	mockPlugin.On("ProcessEvent", mock.Anything, mock.Anything).Return([]*models.Event{}, nil)
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(true).Maybe()
+
+	// Setup ProcessEvent expectations
+	ctx := context.Background()
+	event := &models.Event{
+		ID:      "test_event",
+		Type:    "test_type",
+		Payload: map[string]interface{}{"key": "value"},
+	}
+	mockPlugin.On("ProcessEvent", ctx, event).Return([]*models.Event{}, nil).Once()
 
 	// Register plugin
-	err = manager.RegisterPlugin(mockPlugin)
+	err := mgr.RegisterPlugin(mockPlugin)
 	assert.NoError(t, err)
 
-	// Create test event
+	// Test handling event
+	err = mgr.HandleEvent(ctx, event)
+	assert.NoError(t, err)
+
+	mockPlugin.AssertExpectations(t)
+}
+
+func TestManagerHandleEventWithError(t *testing.T) {
+	mgr := setupTestManager(t)
+
+	// Create mock plugin
+	mockPlugin := new(MockPlugin)
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(true).Maybe()
+
+	// Setup ProcessEvent expectations with error
+	ctx := context.Background()
 	event := &models.Event{
-		ID:        "test_event",
-		Type:      models.EventType("test_plugin"),
-		Timestamp: time.Now(),
-		Payload:   map[string]interface{}{"key": "value"},
+		ID:      "test_event",
+		Type:    "test_type",
+		Payload: map[string]interface{}{"key": "value"},
 	}
+	mockPlugin.On("ProcessEvent", ctx, event).Return([]*models.Event{}, assert.AnError).Once()
 
-	// Process event
-	newEvents, err := mockPlugin.ProcessEvent(context.Background(), event)
+	// Register plugin
+	err := mgr.RegisterPlugin(mockPlugin)
 	assert.NoError(t, err)
-	assert.Empty(t, newEvents)
+
+	// Test handling event with error
+	err = mgr.HandleEvent(ctx, event)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "plugin errors")
+
+	mockPlugin.AssertExpectations(t)
+}
+
+func TestManagerHandleEventWithGeneratedEvents(t *testing.T) {
+	mgr := setupTestManager(t)
+
+	// Create mock plugin
+	mockPlugin := new(MockPlugin)
+	mockPlugin.On("Name").Return("test_plugin").Maybe()
+	mockPlugin.On("Description").Return("Test plugin description").Maybe()
+	mockPlugin.On("IsActive").Return(true).Maybe()
+
+	// Setup ProcessEvent expectations with generated events
+	ctx := context.Background()
+	event := &models.Event{
+		ID:      "test_event",
+		Type:    "test_type",
+		Payload: map[string]interface{}{"key": "value"},
+	}
+	generatedEvent := &models.Event{
+		ID:      "generated_event",
+		Type:    "generated_type",
+		Payload: map[string]interface{}{"generated": "value"},
+	}
+	mockPlugin.On("ProcessEvent", ctx, event).Return([]*models.Event{generatedEvent}, nil).Once()
+	mockPlugin.On("ProcessEvent", ctx, generatedEvent).Return([]*models.Event{}, nil).Once()
+
+	// Register plugin
+	err := mgr.RegisterPlugin(mockPlugin)
+	assert.NoError(t, err)
+
+	// Test handling event with generated events
+	err = mgr.HandleEvent(ctx, event)
+	assert.NoError(t, err)
 
 	mockPlugin.AssertExpectations(t)
 }

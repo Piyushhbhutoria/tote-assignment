@@ -13,6 +13,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// Producer interface for testing
+type Producer interface {
+	SendEvent(ctx context.Context, event *models.Event) error
+	Close() error
+}
+
 func main() {
 	log.Println("Starting POS Event Producer...")
 
@@ -47,7 +53,7 @@ func main() {
 	wg.Wait()
 }
 
-func generateEvents(ctx context.Context, producer *kafka.Producer) {
+func generateEvents(ctx context.Context, producer Producer) {
 	terminals := []string{"POS001", "POS002", "POS003"}
 	employees := []string{"EMP001", "EMP002", "EMP003"}
 	customers := []string{"CUST001", "CUST002", "CUST003"}
@@ -143,7 +149,7 @@ func generateEvents(ctx context.Context, producer *kafka.Producer) {
 	}
 }
 
-func sendEvent(ctx context.Context, producer *kafka.Producer, eventType models.EventType, payload interface{}) {
+func sendEvent(ctx context.Context, producer Producer, eventType models.EventType, payload interface{}) {
 	event := &models.Event{
 		ID:        uuid.New().String(),
 		Type:      eventType,
