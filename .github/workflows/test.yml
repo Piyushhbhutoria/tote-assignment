@@ -1,4 +1,4 @@
-name: tests
+name: Tests
 on:
   push:
     branches:
@@ -10,6 +10,37 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tote_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      kafka:
+        image: wurstmeister/kafka:latest
+        env:
+          KAFKA_ADVERTISED_HOST_NAME: localhost
+          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+          KAFKA_CREATE_TOPICS: "pos_events:1:1"
+        ports:
+          - 9092:9092
+        options: >-
+          --health-cmd "kafka-topics.sh --list --bootstrap-server localhost:9092"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      zookeeper:
+        image: wurstmeister/zookeeper:latest
+        ports:
+          - 2181:2181
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,3 +53,11 @@ jobs:
         run: go mod download
       - name: Run tests
         run: go test -v ./...
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tote_test
+          KAFKA_BROKERS: localhost:9092
+          KAFKA_TOPIC: pos_events
